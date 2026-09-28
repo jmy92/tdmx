@@ -2,7 +2,6 @@
 package manager
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"errors"
@@ -418,11 +417,12 @@ func (m *Manager) GetAllDownloads() []download.DownloadInfo {
 	result := make([]download.DownloadInfo, 0, len(m.downloads))
 	for _, md := range m.downloads {
 		info := download.DownloadInfo{
-			ID:       md.download.ID,
-			Filename: md.download.Filename,
-			Dir:      md.download.Dir,
-			Status:   md.download.Status,
-			Priority: md.download.Priority,
+			ID:        md.download.ID,
+			Filename:  md.download.Filename,
+			Dir:       md.download.Dir,
+			Status:    md.download.Status,
+			Priority:  md.download.Priority,
+			CreatedAt: md.download.CreatedAt,
 		}
 
 		if md.download.Status == download.Active {
@@ -451,7 +451,7 @@ func (m *Manager) GetAllDownloads() []download.DownloadInfo {
 	slices.SortFunc(result, func(a, b download.DownloadInfo) int {
 		return cmp.Or(
 			cmp.Compare(b.Priority, a.Priority),
-			bytes.Compare(a.ID[:], b.ID[:]),
+			b.CreatedAt.Compare(a.CreatedAt),
 		)
 	})
 

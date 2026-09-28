@@ -28,12 +28,13 @@ type Download struct {
 
 // DownloadInfo is the read-only view returned to the TUI.
 type DownloadInfo struct {
-	ID       uuid.UUID
-	Filename string
-	Dir      string
-	Status   Status
-	Priority int
-	Progress Progress
+	ID        uuid.UUID
+	Filename  string
+	Dir       string
+	Status    Status
+	Priority  int
+	CreatedAt time.Time
+	Progress  Progress
 }
 
 type DownloadError struct {

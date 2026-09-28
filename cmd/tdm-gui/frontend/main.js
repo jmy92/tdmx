@@ -459,19 +459,23 @@ async function submitAdd() {
         return;
     }
 
-    btnStart.disabled = true;
-    try {
-        for (const line of url.split("\n")) {
+    // 立即清空输入框并反馈，后端调用改为后台异步执行：
+    // AddDownload 在引擎内部已是异步初始化（显示"正在获取文件名..."），
+    // 前端再 await 会叠加网络探测延迟，造成"卡死"观感。
+    urlInput.value = "";
+    autoGrow();
+    const count = url.split("\n").length;
+    showToast(count > 1 ? `已添加 ${count} 个下载任务` : "已添加下载任务");
+
+    for (const line of url.split("\n")) {
+        try {
             await backend("AddDownload", line, DEFAULT_PRIORITY, 0);
+        } catch (err) {
+            const msg = String(err).replace(/^error:?\s*/i, "");
+            showToast(`添加失败: ${line.slice(0, 40)} — ${msg}`, "error");
+            fieldError.textContent = msg;
+            fieldError.classList.remove("hidden");
         }
-        urlInput.value = "";
-        autoGrow();
-        showToast("已添加下载任务");
-    } catch (err) {
-        fieldError.textContent = String(err).replace(/^error:?\s*/i, "");
-        fieldError.classList.remove("hidden");
-    } finally {
-        btnStart.disabled = false;
     }
 }
 

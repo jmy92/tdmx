@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F4589F"/>
+      <stop offset="0.34" stop-color="#FF8878"/>
+      <stop offset="0.62" stop-color="#EFAE63"/>
+      <stop offset="1" stop-color="#6E8BE8"/>
+    </linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A3448"/>
+      <stop offset="1" stop-color="#241F30"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded square background -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+
+  <!-- subtle inner glow ring -->
+  <rect x="40" y="40" width="432" height="432" rx="96" fill="none" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="8"/>
+
+  <!-- download arrow shaft -->
+  <rect x="228" y="96" width="56" height="180" rx="24" fill="url(#brand)"/>
+
+  <!-- download arrow head -->
+  <path d="M 256 352 L 168 260 Q 156 248 168 236 L 196 208 Q 208 196 220 208 L 256 244 L 292 208 Q 304 196 316 208 L 344 236 Q 356 248 344 260 Z" fill="url(#brand)"/>
+
+  <!-- base tray -->
+  <rect x="136" y="380" width="240" height="40" rx="20" fill="url(#brand)" opacity="0.92"/>
+</svg>

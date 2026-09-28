@@ -1,6 +1,6 @@
 {
   "RT_GROUP_ICON": {
-    "APP": {
+    "#3": {
       "0000": [
         "../assets/icon/png/tdm-256.png",
         "../assets/icon/png/tdm-128.png",
@@ -18,7 +18,7 @@
           "name": "tdm",
           "version": ""
         },
-        "description": "Terminal Download Manager",
+        "description": "TDM - Download Manager",
         "minimum-os": "win7",
         "execution-level": "as invoker",
         "dpi-awareness": "system",
@@ -35,12 +35,12 @@
         },
         "info": {
           "0409": {
-            "CompanyName": "Naman Balaji",
-            "FileDescription": "TDM - Terminal Download Manager",
+            "CompanyName": "tdmx",
+            "FileDescription": "TDM - Download Manager",
             "InternalName": "tdm",
-            "LegalCopyright": "© Naman Balaji. MIT License.",
-            "OriginalFilename": "tdm.exe",
-            "ProductName": "tdm"
+            "LegalCopyright": "MIT License.",
+            "OriginalFilename": "tdm-gui.exe",
+            "ProductName": "TDM"
           }
         }
       }

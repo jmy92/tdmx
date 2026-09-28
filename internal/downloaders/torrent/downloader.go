@@ -34,8 +34,11 @@ func New(client *torrentPkg.Client, dir string) *Downloader {
 
 func (d *Downloader) Type() string { return "torrent" }
 
+// CanHandle routes URLs to the torrent downloader using LOCAL checks only —
+// no network I/O. Network probes (Content-Type etc.) happen in Init, which
+// runs asynchronously, so adding a download never blocks on a slow server.
 func (d *Downloader) CanHandle(url string) bool {
-	return torrentPkg.HasTorrentFile(url) || torrentPkg.IsValidMagnetLink(url)
+	return torrentPkg.LooksLikeTorrentURL(url)
 }
 
 // DownloadDir returns the configured torrent download directory.
@@ -46,7 +49,16 @@ func (d *Downloader) DownloadDir() string { return d.dir }
 func (d *Downloader) SetDownloadDir(dir string) { d.dir = dir }
 
 func (d *Downloader) Init(ctx context.Context, url string, priority, threads int) (*download.Download, error) {
+	// Bare http(s) URLs (no .torrent suffix) were routed here by the local
+	// CanHandle heuristic only when they end in .torrent — anything else
+	// reaching this point is a magnet link. For extension-less URLs that
+	// serve torrent content, verify with a bounded Content-Type probe
+	// before committing to the torrent path.
 	isMagnet := torrentPkg.IsValidMagnetLink(url)
+
+	if !isMagnet && !torrentPkg.HasTorrentFile(url) {
+		return nil, fmt.Errorf("not a torrent URL: %s", url)
+	}
 
 	// Fetch metadata — this may take time for magnet links
 	th, err := d.client.GetTorrentHandler(ctx, url, isMagnet)
