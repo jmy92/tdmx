@@ -1,0 +1,635 @@
+/* ─── 主题变量：暗色（默认） ────────────────────────────── */
+:root, body.theme-dark {
+    --bg: #1a1b23;
+    --bg-sidebar: #14151c;
+    --bg-titlebar: #14151c;
+    --bg-card: #232431;
+    --bg-inset: #1e1f29;
+    --surface: #2c2d3c;
+    --surface-1: #3a3b4e;
+    --border: #31323f;
+    --text: #d7dbe8;
+    --subtext: #9aa0b5;
+    --muted: #6c7086;
+    --accent: #8ab4ff;
+    --accent-2: #61d3b1;
+    --teal: #5fd4b4;
+    --green: #62c97a;
+    --yellow: #e8c86a;
+    --peach: #f0a46c;
+    --red: #ef7189;
+    --mauve: #b89af0;
+    --shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* 亮色模式 */
+body.theme-light {
+    --bg: #f5f6fa;
+    --bg-sidebar: #eceef4;
+    --bg-titlebar: #e4e7ef;
+    --bg-card: #ffffff;
+    --bg-inset: #eef0f6;
+    --surface: #e3e6ee;
+    --surface-1: #d4d8e4;
+    --border: #d9dde8;
+    --text: #2a2d3a;
+    --subtext: #5b6172;
+    --muted: #9aa0b5;
+    --accent: #3b74e8;
+    --accent-2: #1ea87c;
+    --teal: #149e7e;
+    --green: #2f9e4f;
+    --yellow: #b58a1c;
+    --peach: #d97a3d;
+    --red: #d94160;
+    --mauve: #8250d8;
+    --shadow: 0 2px 10px rgba(30, 40, 70, 0.08);
+    --shadow-lg: 0 8px 28px rgba(30, 40, 70, 0.16);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+    transition: background 0.25s ease, color 0.25s ease;
+}
+
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ─── 自定义标题栏 ─────────────────────────────────────── */
+.titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 40px;
+    background: var(--bg-titlebar);
+    /* Wails v3 通过该 CSS 变量识别拖拽区（-webkit-app-region 无效） */
+    --wails-draggable: drag;
+    transition: background 0.25s ease;
+}
+
+.titlebar-drag {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-left: 14px;
+    flex: 1;
+    height: 100%;
+}
+
+.logo-mini { color: var(--mauve); font-size: 15px; }
+.titlebar-title { font-size: 13px; font-weight: 600; }
+
+.global-speed {
+    margin-left: 14px;
+    color: var(--teal);
+    font-size: 12.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 窗口控制按钮（参考图风格：扁平、悬停变色、关闭悬停红） */
+.window-controls {
+    display: flex;
+    height: 100%;
+    --wails-draggable: no-drag;
+}
+
+.wc-btn {
+    width: 46px;
+    height: 100%;
+    border: none;
+    background: transparent;
+    color: var(--subtext);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.wc-btn:hover { background: var(--surface); color: var(--text); }
+.wc-btn:active { filter: brightness(0.9); }
+.wc-close:hover { background: #e81123; color: #ffffff; }
+.wc-btn svg { display: block; }
+
+/* ─── 布局 ─────────────────────────────────────────────── */
+.layout { display: flex; flex: 1; min-height: 0; }
+
+/* ─── 侧边栏（参考图：深色纵栏 + 图标导航 + 分组标签） ── */
+.sidebar {
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    padding: 10px 0 14px;
+    transition: background 0.25s ease;
+}
+
+.side-nav { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
+
+.nav-group-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 12px 10px 6px;
+    letter-spacing: 0.5px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: none;
+    background: transparent;
+    color: var(--subtext);
+    font-size: 13.5px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s ease, color 0.15s ease;
+    width: 100%;
+}
+
+.nav-item:hover { background: var(--surface); color: var(--text); }
+
+/* 侧边栏保存目录设置项：标签 + 路径两行显示 */
+.nav-savedir-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+    gap: 1px;
+}
+.nav-savedir-label { font-size: 13px; }
+.nav-savedir-path {
+    font-size: 10.5px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl; /* 从尾部截断，保留最深的目录层级 */
+    text-align: left;
+}
+#nav-savedir:hover .nav-savedir-path { color: var(--subtext); }
+
+.nav-item.active {
+    background: var(--bg-card);
+    color: var(--text);
+    font-weight: 600;
+    box-shadow: var(--shadow);
+}
+
+.nav-icon { flex-shrink: 0; opacity: 0.9; }
+.nav-item.active .nav-icon { color: var(--accent); }
+
+.nav-count {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--surface);
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.nav-item.active .nav-count { color: var(--text); background: var(--surface-1); }
+
+/* ─── 主内容区 ─────────────────────────────────────────── */
+.content { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 18px 22px; overflow: hidden; }
+
+/* 顶部下载栏：输入框 + 开始按钮组成的整体输入单元 */
+.download-bar {
+    display: flex;
+    align-items: center; /* 多行展开时按钮保持垂直居中 */
+    gap: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: var(--shadow);
+    margin-bottom: 6px;
+    transition: background 0.25s ease;
+}
+
+.url-input {
+    flex: 1;
+    min-width: 0;
+    min-height: 42px;   /* 与按钮等高 */
+    height: 42px;       /* JS autoGrow 会在内容增多时调高 */
+    background: var(--bg-inset);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 15px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 21px;  /* 10px 上下 padding + 21px 行高 = 41 ≈ 42 边框 */
+    resize: none; /* 不允许拖拽调整大小，高度随内容自动增长 */
+    overflow: hidden; /* 展开后无需滚动条 */
+    outline: none;
+    transition: border-color 0.18s;
+}
+
+.url-input:focus { border-color: var(--accent); }
+.url-input::placeholder { color: var(--muted); }
+
+.btn-start {
+    height: 42px;       /* 与输入框等高 */
+    padding: 0 26px;
+    font-size: 14px;
+    border-radius: 10px;
+    flex-shrink: 0;     /* 输入框展开时不被压缩 */
+    align-self: center;
+}
+.btn-start:disabled { opacity: 0.6; cursor: wait; transform: none; }
+
+#field-error { margin: 6px 2px 0; }
+#field-error:not(.hidden) { margin-bottom: 6px; }
+
+.view-title { font-size: 17px; font-weight: 700; margin: 12px 0; }
+
+/* ─── 下载列表 ─────────────────────────────────────────── */
+.list-area { flex: 1; overflow-y: auto; padding-right: 4px; }
+
+.list-area::-webkit-scrollbar { width: 8px; }
+.list-area::-webkit-scrollbar-thumb { background: var(--surface-1); border-radius: 4px; }
+.list-area::-webkit-scrollbar-track { background: transparent; }
+
+.card {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 14px 10px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* 鼠标悬停无位移动画，仅轻微提亮边框以示可交互区域 */
+.card:hover { border-color: var(--surface-1); }
+@keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.card-row { display: flex; align-items: center; gap: 12px; }
+.card-row-top { gap: 9px; }
+
+/* 取消态：任务名加删除线、进度条置灰 */
+.card.st-cancelled .card-title { text-decoration: line-through; opacity: 0.55; }
+.card.st-cancelled .progress-track { opacity: 0.35; }
+.card.st-failed .card-title { opacity: 0.75; }
+
+/* 状态圆点（迅雷式）：代替原来的左侧粗色条 */
+.status-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.card.st-active .status-dot    { background: var(--teal);    box-shadow: 0 0 0 3px rgba(95, 212, 180, 0.18); }
+.card.st-paused .status-dot    { background: var(--peach);   box-shadow: 0 0 0 3px rgba(240, 164, 108, 0.16); }
+.card.st-queued .status-dot,
+.card.st-pending .status-dot,
+.card.st-initializing .status-dot { background: var(--yellow); box-shadow: 0 0 0 3px rgba(232, 200, 106, 0.16); }
+.card.st-completed .status-dot { background: var(--green);   box-shadow: 0 0 0 3px rgba(98, 201, 122, 0.16); }
+.card.st-failed .status-dot    { background: var(--red);     box-shadow: 0 0 0 3px rgba(239, 113, 137, 0.16); }
+.card.st-cancelled .status-dot { background: var(--mauve);   box-shadow: 0 0 0 3px rgba(184, 154, 240, 0.16); }
+
+.card-title {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    font-size: 13.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 文件名右侧的静态信息：大小 + 优先级，固定不伸缩，
+   百分比对齐靠 .card-percent 的 min-width 保证 */
+.card-size {
+    color: var(--muted);
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.card-percent {
+    color: var(--subtext);
+    font-weight: 600;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    min-width: 44px;
+    text-align: right;
+    flex-shrink: 0;
+}
+.card.st-active .card-percent { color: var(--accent); font-weight: 700; }
+
+/* 进度行内嵌的实时速度：固定宽度防止数字跳动推挤按钮 */
+.card-speed {
+    color: var(--teal);
+    font-size: 11.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.card-speed:empty { display: none; }
+
+/* ─── 完成态卡片：归档式收尾，无进度条 ────────────────── */
+.done-check {
+    flex-shrink: 0;
+    display: flex;
+    color: var(--green);
+}
+
+/* 文件丢失态：整卡置灰 + 文件名与路径删除线，弱化为已失效记录 */
+.card.st-completed.file-missing { opacity: 0.55; }
+.card.st-completed.file-missing .done-check { color: var(--muted); }
+.card.st-completed.file-missing .card-title,
+.card.st-completed.file-missing .card-path span {
+    text-decoration: line-through;
+}
+
+.done-row {
+    margin-top: -2px;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+/* 保存目录行：完成态内嵌于 done-row 左侧 */
+.card-path {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 11.5px;
+    min-width: 0;
+    flex: 1;
+}
+.card-path svg { flex-shrink: 0; opacity: 0.7; }
+.card-path span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 打开目录按钮：主操作，浅绿 ghost 以示推荐 */
+.btn-open {
+    background: rgba(98, 201, 122, 0.10);
+    border: 1px solid transparent;
+    color: var(--green);
+}
+.btn-open:hover { background: rgba(98, 201, 122, 0.20); color: var(--green); }
+
+.badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.badge-active    { color: var(--teal);    background: rgba(95, 212, 180, 0.12); }
+.badge-paused    { color: var(--peach);   background: rgba(240, 164, 108, 0.12); }
+.badge-queued    { color: var(--yellow);  background: rgba(232, 200, 106, 0.12); }
+.badge-completed { color: var(--green);   background: rgba(98, 201, 122, 0.12); }
+.badge-failed    { color: var(--red);     background: rgba(239, 113, 137, 0.12); }
+.badge-cancelled { color: var(--mauve);   background: rgba(184, 154, 240, 0.12); }
+.badge-pending   { color: var(--yellow);  background: rgba(232, 200, 106, 0.12); }
+.badge-initializing { color: var(--yellow);  background: rgba(232, 200, 106, 0.12); }
+
+.card-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* 可点击的优先级徽章（文件名右侧） */
+.prio-badge {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    padding: 2px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.prio-badge:hover { background: var(--surface); color: var(--accent); }
+
+/* ─── 弹窗 ─────────────────────────────────────────────── */
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 20, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+.modal.hidden { display: none; }
+
+.modal-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+    width: 320px;
+    box-shadow: var(--shadow-lg);
+}
+
+.modal-title { font-size: 15px; font-weight: 700; }
+.modal-name {
+    font-size: 12.5px;
+    color: var(--subtext);
+    margin-top: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.modal-hint { font-size: 11.5px; color: var(--muted); margin: 4px 0 14px; }
+
+.priority-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+
+.prio-opt {
+    border: 1.5px solid var(--border);
+    background: var(--bg-inset);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    padding: 8px 0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.prio-opt:hover { border-color: var(--accent); }
+.prio-opt.current { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+
+.modal-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+/* ─── 右键菜单 ─────────────────────────────────────────── */
+.context-menu {
+    position: fixed;
+    z-index: 110;
+    min-width: 128px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 5px;
+    box-shadow: var(--shadow-lg);
+}
+.context-menu.hidden { display: none; }
+
+.context-item {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    text-align: left;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+.context-item:hover { background: var(--accent); color: #ffffff; }
+
+/* 进度条 */
+.progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.progress-track {
+    flex: 1;
+    height: 5px;
+    background: var(--bg-inset);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    /* 宽度由 500ms 轮询驱动，加 transition 反而让浏览器持续重排；
+       min-width 保证小百分比时圆角可见 */
+    transition: none;
+    min-width: 0;
+}
+
+.progress-fill.st-completed { background: var(--green); }
+.progress-fill.st-failed    { background: var(--red); }
+.progress-fill.st-paused    { background: var(--peach); }
+.progress-fill.st-cancelled { background: var(--mauve); }
+.progress-fill.st-queued,
+.progress-fill.st-pending,
+.progress-fill.st-initializing { background: var(--yellow); }
+
+.progress-fill.st-active { position: relative; overflow: hidden; }
+.progress-fill.st-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+    /* 只动 transform，且降频到 3s，减少持续合成开销 */
+    animation: shimmer 3s infinite;
+}
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* 状态色不再用左边框表达，圆点 + 徽章已足够 */
+
+/* ─── 按钮 ─────────────────────────────────────────────── */
+.btn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    color: var(--text);
+    background: var(--surface);
+}
+
+.btn:hover { filter: brightness(1.08); }
+.btn:active { filter: brightness(0.95); }
+
+.btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #ffffff; }
+body.theme-light .btn-primary { color: #ffffff; }
+.btn-icon { font-weight: 700; }
+.btn-ghost { background: transparent; border: 1px solid var(--surface-1); }
+
+.btn-sm { padding: 4px 12px; font-size: 12px; border-radius: 7px; text-align: center; }
+.btn-sm:hover { transform: none; filter: none; }
+
+/* 卡片内操作按钮：幽灵样式（描边浅底），悬停才显出对应状态色，
+   避免删除键大面积红色破坏整体安静感 */
+.btn-pause, .btn-resume, .btn-cancel, .btn-remove {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--subtext);
+}
+.btn-pause:hover  { color: var(--peach); border-color: var(--peach); background: rgba(240, 164, 108, 0.08); }
+.btn-resume:hover { color: var(--teal);  border-color: var(--teal);  background: rgba(95, 212, 180, 0.08); }
+.btn-cancel:hover { color: var(--yellow); border-color: var(--yellow); background: rgba(232, 200, 106, 0.08); }
+.btn-remove:hover { color: var(--red);   border-color: var(--red);   background: rgba(239, 113, 137, 0.08); }
+
+/* 状态不可用的按钮：固定占位但置灰，避免布局跳动 */
+.btn-sm:disabled {
+    opacity: 0.32;
+    cursor: default;
+    pointer-events: none;
+    filter: grayscale(1);
+}
+
+/* ─── 空状态 ───────────────────────────────────────────── */
+.empty-state { text-align: center; padding-top: 16vh; }
+.empty-logo {
+    font-size: 52px; font-weight: 800; letter-spacing: 4px;
+    background: linear-gradient(135deg, var(--accent), var(--mauve), var(--red));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.empty-title { margin-top: 12px; font-size: 15px; }
+.empty-hint { margin-top: 6px; color: var(--muted); font-size: 12.5px; }
+
+/* ─── 通知 ─────────────────────────────────────────────── */
+.toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: var(--shadow-lg);
+    transition: opacity 0.25s;
+    z-index: 100;
+}
+.toast.success { background: var(--green); color: #ffffff; }
+.toast.error { background: var(--red); color: #ffffff; }
+.hidden { display: none !important; }
+
+/* ─── 表单通用 ─────────────────────────────────────────── */
+.field-label { font-size: 12.5px; font-weight: 600; color: var(--subtext); }
+.field-error { color: var(--red); font-size: 12px; }

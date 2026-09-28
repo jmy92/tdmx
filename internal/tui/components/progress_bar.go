@@ -38,6 +38,8 @@ func ProgressBar(width int, percent float64, s download.Status) string {
 		filledStyle = lipgloss.NewStyle().Foreground(styles.Red)
 	case download.Pending, download.Queued:
 		filledStyle = lipgloss.NewStyle().Foreground(styles.Yellow)
+	case download.Initializing:
+		filledStyle = lipgloss.NewStyle().Foreground(styles.Yellow)
 	}
 
 	bar := filledStyle.Render(filledStr) + styles.ProgressBarEmptyStyle.Render(emptyStr)

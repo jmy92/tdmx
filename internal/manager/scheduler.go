@@ -21,6 +21,9 @@ func schedule(downloads map[uuid.UUID]*managedDownload, maxConcurrent int) sched
 
 	for _, md := range downloads {
 		s := md.download.Status
+		// Initializing downloads are still probing in the background and
+		// have no state to start yet — the scheduler picks them up once
+		// initialization completes and they move to Queued.
 		if s == download.Active || s == download.Queued || s == download.Pending {
 			candidates = append(candidates, md)
 		}

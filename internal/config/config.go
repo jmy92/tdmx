@@ -82,6 +82,43 @@ func GetConfig() (*Config, error) {
 	return cfg, nil
 }
 
+// Path returns the config file path used by GetConfig.
+func Path() string {
+	return filepath.Join(xdg.ConfigHome, configFileName)
+}
+
+// Save persists the config to the default path as YAML.
+func (c *Config) Save() error {
+	return c.SaveTo(Path())
+}
+
+// SaveTo persists the config to the given path as YAML, creating parent dirs.
+func (c *Config) SaveTo(path string) error {
+	if dir := filepath.Dir(path); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("creating config dir: %w", err)
+		}
+	}
+
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+
+	// 原子写：先写临时文件再重命名，避免半写文件
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("replacing config: %w", err)
+	}
+
+	return nil
+}
+
 // LoadConfigWithFlags loads config from the given path and applies the provided FlagSet.
 // Used for testing without touching global flag.CommandLine.
 func LoadConfigWithFlags(path string, fs *flag.FlagSet) (*Config, error) {

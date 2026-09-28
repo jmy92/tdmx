@@ -82,54 +82,32 @@ func TestParseLastModified(t *testing.T) {
 	}
 }
 
+// TestIsDownloadable verifies the local-only (no network) URL validation.
+// Since the rewrite, IsDownloadable performs no HTTP requests — content-type
+// based filtering happens later during the async probe in the HTTP
+// downloader, so a URL to an HTML page is accepted here and rejected after
+// initialization if it isn't a real download.
 func TestIsDownloadable(t *testing.T) {
-	mux := http.NewServeMux()
-	// 1. HEAD returns HTML
-	mux.HandleFunc("/html", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodHead {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		http.Error(w, "fallback GET", http.StatusOK)
-	})
-	// 2. HEAD returns binary
-	mux.HandleFunc("/binary", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodHead {
-			w.Header().Set("Content-Type", "application/octet-stream")
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		http.Error(w, "fallback GET", http.StatusOK)
-	})
-	// 3. HEAD not allowed, GET returns binary
-	mux.HandleFunc("/nohead", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodHead {
-			http.Error(w, "not supported", http.StatusMethodNotAllowed)
-			return
-		}
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.WriteHeader(http.StatusOK)
-	})
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
-
 	tests := []struct {
 		name string
-		path string
+		url  string
 		want bool
 	}{
-		{"HTML not downloadable", "/html", false},
-		{"Binary downloadable", "/binary", true},
-		{"No HEAD, fallback GET downloadable", "/nohead", true},
+		{"HTTP URL with host", "http://example.com/file.zip", true},
+		{"HTTPS URL with host", "https://example.com/file.zip", true},
+		{"HTML page URL accepted locally", "http://127.0.0.1:1/html", true},
+		{"Missing host", "http:///path/only", false},
+		{"Unsupported scheme ftp", "ftp://example.com/file", false},
+		{"Unsupported scheme file", "file:///etc/passwd", false},
+		{"Empty host", "http://", false},
+		{"Garbage string", "not a url at all", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			url := ts.URL + tt.path
-			got := httpmod.IsDownloadable(url)
+			got := httpmod.IsDownloadable(tt.url)
 			if got != tt.want {
-				t.Errorf("IsDownloadable(%q) = %v; want %v", url, got, tt.want)
+				t.Errorf("IsDownloadable(%q) = %v; want %v", tt.url, got, tt.want)
 			}
 		})
 	}

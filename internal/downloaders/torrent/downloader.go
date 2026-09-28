@@ -38,7 +38,14 @@ func (d *Downloader) CanHandle(url string) bool {
 	return torrentPkg.HasTorrentFile(url) || torrentPkg.IsValidMagnetLink(url)
 }
 
-func (d *Downloader) Init(ctx context.Context, url string, priority int) (*download.Download, error) {
+// DownloadDir returns the configured torrent download directory.
+func (d *Downloader) DownloadDir() string { return d.dir }
+
+// SetDownloadDir updates the download directory at runtime. Takes effect for
+// newly added downloads; in-flight downloads keep their original directory.
+func (d *Downloader) SetDownloadDir(dir string) { d.dir = dir }
+
+func (d *Downloader) Init(ctx context.Context, url string, priority, threads int) (*download.Download, error) {
 	isMagnet := torrentPkg.IsValidMagnetLink(url)
 
 	// Fetch metadata — this may take time for magnet links

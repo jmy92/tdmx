@@ -29,13 +29,21 @@ type Downloader interface {
 
 	// CanHandle reports whether this Downloader can handle the given URL.
 	// Called in registration order; first match wins.
+	// MUST NOT make network requests — it runs synchronously on the
+	// add-download path and needs to return instantly.
 	CanHandle(url string) bool
+
+	// DownloadDir returns the configured directory where this downloader
+	// saves completed files. Used to pre-fill Download.Dir before Init.
+	DownloadDir() string
 
 	// Init creates a new Download by probing the URL for metadata.
 	// It populates Filename, TotalSize, Type, Dir, and BackendState.
 	// The download directory comes from the Downloader's own config.
+	// threads is the requested per-download connection count; 0 means
+	// the Downloader's configured default.
 	// This may make network requests (e.g., HTTP HEAD, torrent metadata fetch).
-	Init(ctx context.Context, url string, priority int) (*Download, error)
+	Init(ctx context.Context, url string, priority, threads int) (*Download, error)
 
 	// Start downloads the file. It blocks until the download completes,
 	// fails, or ctx is cancelled (pause/cancel).

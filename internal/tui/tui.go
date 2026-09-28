@@ -52,7 +52,7 @@ func newManagerActions(ctx context.Context, m *manager.Manager) managerActions {
 	return managerActions{
 		Pause:  func(id uuid.UUID) { m.PauseDownload(ctx, id) },
 		Resume: func(id uuid.UUID) { m.ResumeDownload(ctx, id) },
-		Add:    func(url string, p int) error { _, err := m.AddDownload(ctx, url, p); return err },
+		Add:    func(url string, p int) error { _, err := m.AddDownload(ctx, url, p, 0); return err },
 		Cancel: func(id uuid.UUID) { m.CancelDownload(ctx, id) },
 		Remove: func(id uuid.UUID) { m.RemoveDownload(ctx, id) },
 		GetAll: m.GetAllDownloads,

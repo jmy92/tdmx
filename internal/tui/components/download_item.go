@@ -38,6 +38,8 @@ func DownloadItem(info download.DownloadInfo, width int, selected bool) string {
 		statusLabel = styles.StatusFailed.Render("✖ failed")
 	case download.Pending, download.Queued:
 		statusLabel = styles.StatusQueued.Render("○ queued")
+	case download.Initializing:
+		statusLabel = styles.StatusQueued.Render("◌ initializing")
 	}
 
 	statusBlock := lipgloss.NewStyle().Width(12).Render(statusLabel)

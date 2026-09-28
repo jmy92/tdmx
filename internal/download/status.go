@@ -11,6 +11,10 @@ const (
 	Failed                  // Stopped due to error
 	Queued                  // Waiting for a slot in the scheduler
 	Cancelled               // Stopped by user, cannot resume
+
+	// Initializing is appended (not inserted) so the numeric values of the
+	// statuses above stay stable for records already persisted in the DB.
+	Initializing // Probing URL / fetching metadata in background
 )
 
 func (s Status) IsTerminal() bool {
@@ -21,6 +25,8 @@ func (s Status) String() string {
 	switch s {
 	case Pending:
 		return "pending"
+	case Initializing:
+		return "initializing"
 	case Active:
 		return "active"
 	case Paused:

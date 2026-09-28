@@ -27,9 +27,10 @@ var (
 
 // managedDownload wraps a Download with runtime state that only the Manager.
 type managedDownload struct {
-	download *download.Download
-	cancel   context.CancelFunc
-	tracker  *download.ProgressTracker
+	download   *download.Download
+	cancel     context.CancelFunc
+	tracker    *download.ProgressTracker
+	initPaused bool // user paused while background initialization was running
 }
 
 // Manager orchestrates downloads. It is the SOLE OWNER of all Download
@@ -48,6 +49,10 @@ type Manager struct {
 	shutdownOnce sync.Once
 	shutdownDone chan struct{}
 	wg           sync.WaitGroup
+	ctx          context.Context // lifecycle context set by Start
+
+	errMu        sync.Mutex // guards errors channel close state
+	errorsClosed bool
 }
 
 func New(store store.Store, maxConcurrent int) *Manager {
@@ -76,6 +81,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 
 	m.mu.Lock()
+	m.ctx = ctx
 	for _, dl := range downloads {
 		// Downloads that were Active when the app closed are reset to Paused
 		if dl.Status == download.Active {
@@ -84,6 +90,11 @@ func (m *Manager) Start(ctx context.Context) error {
 		// Downloads that were Queued/Pending are also paused (they'll be scheduled when resumed)
 		if dl.Status == download.Queued || dl.Status == download.Pending {
 			dl.Status = download.Paused
+		}
+		// A download interrupted mid-initialization has no backend state to
+		// resume from — mark it failed so the user re-adds it.
+		if dl.Status == download.Initializing {
+			dl.Status = download.Failed
 		}
 
 		m.downloads[dl.ID] = &managedDownload{
@@ -100,8 +111,14 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
-// AddDownload adds a new download from a URL.
-func (m *Manager) AddDownload(ctx context.Context, url string, priority int) (uuid.UUID, error) {
+// AddDownload adds a new download from a URL. threads is the requested
+// per-download connection count; 0 means each downloader's configured default.
+//
+// The download is created and visible in the list immediately (Initializing
+// status); URL probing / metadata fetching runs in the background. When the
+// probe finishes successfully the download enters the scheduler; on failure
+// it is marked Failed with the error surfaced through GetErrors.
+func (m *Manager) AddDownload(ctx context.Context, url string, priority, threads int) (uuid.UUID, error) {
 	if priority < 1 || priority > 10 {
 		return uuid.Nil(), ErrInvalidPriority
 	}
@@ -120,12 +137,17 @@ func (m *Manager) AddDownload(ctx context.Context, url string, priority int) (uu
 		return uuid.Nil(), ErrNoDownloader
 	}
 
-	dl, err := dlr.Init(ctx, url, priority)
-	if err != nil {
-		return uuid.Nil(), fmt.Errorf("failed to initialize download: %w", err)
+	now := time.Now()
+	dl := &download.Download{
+		ID:        uuid.New(),
+		URL:       url,
+		Filename:  "正在获取文件名...",
+		Dir:       dlr.DownloadDir(),
+		Status:    download.Initializing,
+		Priority:  priority,
+		Type:      dlr.Type(),
+		CreatedAt: now,
 	}
-
-	dl.CreatedAt = time.Now()
 
 	if err := m.store.Save(ctx, dl); err != nil {
 		return uuid.Nil(), fmt.Errorf("failed to persist download: %w", err)
@@ -138,9 +160,128 @@ func (m *Manager) AddDownload(ctx context.Context, url string, priority int) (uu
 	}
 	m.mu.Unlock()
 
-	m.requestReschedule()
+	// Probe asynchronously — never block the caller on network I/O.
+	go m.initializeDownload(dlr, dl, threads)
 
 	return dl.ID, nil
+}
+
+// initializeDownload runs the downloader's Init (network probing) in the
+// background, then either schedules the download or marks it failed.
+func (m *Manager) initializeDownload(dlr download.Downloader, dl *download.Download, threads int) {
+	// Use a detached context: initialization must survive short-lived
+	// request contexts but still abort on shutdown.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(m.shutdownCtx()), 5*time.Minute)
+	defer cancel()
+
+	initialized, err := dlr.Init(ctx, dl.URL, dl.Priority, threads)
+	if err != nil {
+		// If the user removed/cancelled it meanwhile, don't resurrect it.
+		m.mu.RLock()
+		md, ok := m.downloads[dl.ID]
+		stillInitializing := ok && md.download.Status == download.Initializing
+		m.mu.RUnlock()
+
+		if stillInitializing {
+			m.mu.Lock()
+			md.download.Status = download.Failed
+			m.mu.Unlock()
+
+			slog.Error("download initialization failed", "id", dl.ID, "url", dl.URL, "err", err)
+			m.sendError(dl.ID, fmt.Errorf("failed to initialize download: %w", err))
+		}
+
+		return
+	}
+
+	initialized.CreatedAt = dl.CreatedAt
+
+	m.mu.Lock()
+
+	md, ok := m.downloads[dl.ID]
+	if !ok || md.download.Status == download.Cancelled {
+		// Removed while initializing — clean up anything Init created.
+		m.mu.Unlock()
+		_ = dlr.Remove(initialized)
+
+		return
+	}
+
+	paused := md.download.Status == download.Paused // user paused it while probing
+	md.initPaused = paused
+
+	md.download.Filename = initialized.Filename
+	md.download.Dir = initialized.Dir
+	md.download.TotalSize = initialized.TotalSize
+	md.download.State = initialized.State
+
+	if paused {
+		md.download.Status = download.Paused
+	} else {
+		md.download.Status = download.Queued
+	}
+	m.mu.Unlock()
+
+	if saveErr := m.store.Save(context.WithoutCancel(m.shutdownCtx()), md.download); saveErr != nil {
+		slog.Error("failed to save download after initialization", "id", dl.ID, "err", saveErr)
+	}
+
+	m.requestReschedule()
+}
+
+// shutdownCtx returns the manager's lifecycle context, used to derive
+// detached contexts for background work.
+func (m *Manager) shutdownCtx() context.Context {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.ctx
+}
+
+// GetDownload returns a copy of the download with the given ID.
+func (m *Manager) GetDownload(id uuid.UUID) (download.Download, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	md, ok := m.downloads[id]
+	if !ok {
+		return download.Download{}, false
+	}
+
+	return *md.download, true
+}
+
+// SetPriority updates a download's priority (1-10) and re-schedules so the
+// new priority takes effect immediately. Higher number = started first.
+func (m *Manager) SetPriority(ctx context.Context, id uuid.UUID, priority int) error {
+	if priority < 1 || priority > 10 {
+		return ErrInvalidPriority
+	}
+
+	m.mu.Lock()
+
+	md, ok := m.downloads[id]
+	if !ok {
+		m.mu.Unlock()
+		return ErrNotFound
+	}
+
+	if md.download.Status.IsTerminal() {
+		m.mu.Unlock()
+		return fmt.Errorf("%w: download is %s", ErrNotFound, md.download.Status)
+	}
+
+	md.download.Priority = priority
+	dlCopy := *md.download
+	m.mu.Unlock()
+
+	if err := m.store.Save(ctx, &dlCopy); err != nil {
+		slog.Error("failed to save download after priority change", "id", id, "err", err)
+	}
+
+	m.requestReschedule()
+
+	return nil
 }
 
 // PauseDownload pauses an active or queued download.
@@ -153,7 +294,9 @@ func (m *Manager) PauseDownload(ctx context.Context, id uuid.UUID) {
 		return
 	}
 
-	if md.download.Status != download.Active && md.download.Status != download.Queued {
+	if md.download.Status != download.Active &&
+		md.download.Status != download.Queued &&
+		md.download.Status != download.Initializing {
 		m.mu.Unlock()
 		return
 	}
@@ -181,6 +324,24 @@ func (m *Manager) ResumeDownload(ctx context.Context, id uuid.UUID) {
 	if s != download.Paused && s != download.Failed {
 		m.mu.Unlock()
 		return
+	}
+
+	// A download paused during background initialization has no backend
+	// state yet — resuming it now would start the downloader with empty
+	// state. Leave it paused; initialization completion handles the
+	// transition back to Queued.
+	if md.initPaused && md.download.Status == download.Paused {
+		m.mu.Unlock()
+		return
+	}
+
+	// 恢复时把目录同步为当前设置的保存目录：改设置只影响新任务会让
+	// 存量任务永远停在旧目录，与用户预期不符。恢复是最后一次让任务
+	// 跟上当前设置的时机（分片状态与 Dir 无关，迁移无损）。
+	if dlr, ok := m.dlrByType[md.download.Type]; ok {
+		if dir := dlr.DownloadDir(); dir != "" {
+			md.download.Dir = dir
+		}
 	}
 
 	md.download.Status = download.Queued
@@ -259,6 +420,7 @@ func (m *Manager) GetAllDownloads() []download.DownloadInfo {
 		info := download.DownloadInfo{
 			ID:       md.download.ID,
 			Filename: md.download.Filename,
+			Dir:      md.download.Dir,
 			Status:   md.download.Status,
 			Priority: md.download.Priority,
 		}
@@ -327,7 +489,7 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 
 		select {
 		case <-done:
-			close(m.errors)
+			m.closeErrors()
 		case <-ctx.Done():
 			err = ErrShutdownTimeout
 		}
@@ -492,7 +654,21 @@ func (m *Manager) saveAll(ctx context.Context) {
 }
 
 // sendError sends an error on the errors channel without blocking.
+// sendError sends an error on the errors channel without blocking.
+// The closed-flag mutex prevents sending on the channel after Shutdown
+// closed it (background init goroutines may outlive the run loop).
 func (m *Manager) sendError(id uuid.UUID, err error) {
+	if err == nil {
+		return
+	}
+
+	m.errMu.Lock()
+	defer m.errMu.Unlock()
+
+	if m.errorsClosed {
+		return
+	}
+
 	select {
 	case m.errors <- download.DownloadError{ID: id, Error: err}:
 	default:
@@ -500,7 +676,29 @@ func (m *Manager) sendError(id uuid.UUID, err error) {
 	}
 }
 
+// closeErrors marks the error channel closed and closes it. Callers must
+// hold no other expectations — called exactly once from Shutdown.
+func (m *Manager) closeErrors() {
+	m.errMu.Lock()
+	defer m.errMu.Unlock()
+
+	if !m.errorsClosed {
+		m.errorsClosed = true
+		close(m.errors)
+	}
+}
+
 // findDownloader finds the registered Downloader for the given type string.
 func (m *Manager) findDownloader(dlType string) download.Downloader {
 	return m.dlrByType[dlType]
+}
+
+// Downloaders returns the registered downloaders by type (copy of the map).
+func (m *Manager) Downloaders() map[string]download.Downloader {
+	out := make(map[string]download.Downloader, len(m.dlrByType))
+	for k, v := range m.dlrByType {
+		out[k] = v
+	}
+
+	return out
 }

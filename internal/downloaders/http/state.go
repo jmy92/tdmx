@@ -7,6 +7,9 @@ type httpState struct {
 	Chunks         []chunkState `json:"chunks"`
 	SupportsRanges bool         `json:"supportsRanges"`
 	TempDir        string       `json:"tempDir"`
+	// Threads is the per-download connection limit requested by the user;
+	// 0 means use the downloader's configured default.
+	Threads int `json:"threads,omitempty"`
 }
 
 // chunkState represents a single byte-range chunk's persistent state.

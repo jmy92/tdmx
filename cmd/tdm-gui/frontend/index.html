@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TDM - 下载管理器</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="module" src="/wails/runtime.js"></script>
+</head>
+<body class="theme-light">
+    <div class="app">
+        <!-- 自定义标题栏：拖拽区 + 窗口控制按钮 -->
+        <header class="titlebar">
+            <div class="titlebar-drag">
+                <span class="logo-mini">▓</span>
+                <span class="titlebar-title">TDM 下载管理器</span>
+                <span id="global-speed" class="global-speed">↓ 0 B/s</span>
+            </div>
+            <div class="window-controls">
+                <button class="wc-btn" id="wc-min" title="最小化">
+                    <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1" fill="currentColor"/></svg>
+                </button>
+                <button class="wc-btn" id="wc-max" title="最大化/还原">
+                    <svg width="12" height="12" viewBox="0 0 12 12" class="icon-max"><rect x="1.5" y="1.5" width="9" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+                </button>
+                <button class="wc-btn wc-close" id="wc-close" title="关闭">
+                    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2 L10 10 M10 2 L2 10" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="layout">
+            <!-- 左侧边栏 -->
+            <aside class="sidebar">
+                <nav class="side-nav" id="side-nav">
+                    <div class="nav-group-label">下载</div>
+                    <button class="nav-item active" data-filter="all">
+                        <svg class="nav-icon" viewBox="0 0 16 16" width="15" height="15"><path d="M2 2.5h5v1.5H2zM2 6h5v1.5H2zM2 9.5h5v1.5H2zM9 2.5h5V4H9zM9 6h5v1.5H9zM9 9.5h5v1.5H9z" fill="currentColor"/></svg>
+                        <span>全部任务</span>
+                        <span class="nav-count" id="nav-count-all">0</span>
+                    </button>
+                    <button class="nav-item" data-filter="active">
+                        <svg class="nav-icon" viewBox="0 0 16 16" width="15" height="15"><path d="M8 1.5 14 4v4c0 3.5-2.5 6-6 7-3.5-1-6-3.5-6-7V4z" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 4.5v4M6 6.5l2 2 2-2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+                        <span>进行中</span>
+                        <span class="nav-count" id="nav-count-active">0</span>
+                    </button>
+                    <button class="nav-item" data-filter="completed">
+                        <svg class="nav-icon" viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5 8.2l2 2 4-4.4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+                        <span>已完成</span>
+                        <span class="nav-count" id="nav-count-completed">0</span>
+                    </button>
+                    <button class="nav-item" data-filter="failed">
+                        <svg class="nav-icon" viewBox="0 0 16 16" width="15" height="15"><path d="M8 1.5 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 6v3.4" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor"/></svg>
+                        <span>失败</span>
+                        <span class="nav-count" id="nav-count-failed">0</span>
+                    </button>
+
+                    <div class="nav-group-label">设置</div>
+                    <button class="nav-item nav-setting" id="nav-savedir" title="点击修改下载保存目录">
+                        <svg class="nav-icon" viewBox="0 0 16 16" width="15" height="15"><path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h3l1.5 2h4.5A1.5 1.5 0 0 1 14 5.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5z" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+                        <span class="nav-savedir-text">
+                            <span class="nav-savedir-label">保存目录</span>
+                            <span class="nav-savedir-path" id="savedir-path">...</span>
+                        </span>
+                    </button>
+                    <button class="nav-item" id="nav-theme">
+                        <svg class="nav-icon" id="theme-icon" viewBox="0 0 16 16" width="15" height="15"><path class="theme-moon" d="M13.5 9.5A5.5 5.5 0 1 1 6.5 2.5a4.5 4.5 0 0 0 7 7z" fill="currentColor"/></svg>
+                        <span id="theme-label">亮色模式</span>
+                    </button>
+                </nav>
+            </aside>
+
+            <!-- 主内容区 -->
+            <main class="content">
+                <!-- 顶部下载栏：输入框 + 优先级 + 开始下载 -->
+                <section class="download-bar">
+                    <textarea id="url-input" class="url-input" rows="3" spellcheck="false"
+                           placeholder="粘贴下载链接，支持 HTTP/HTTPS、.torrent 和磁力链接"></textarea>
+                    <button class="btn btn-primary btn-start" id="btn-start">开始下载</button>
+                </section>
+                <p class="field-error hidden" id="field-error"></p>
+
+                <!-- 当前视图标题 -->
+                <h2 class="view-title" id="view-title">概览</h2>
+
+                <!-- 下载列表 -->
+                <div class="list-area" id="list">
+                    <div class="empty-state" id="empty-state">
+                        <div class="empty-logo">TDM</div>
+                        <p class="empty-title">暂无下载任务</p>
+                        <p class="empty-hint">在上方粘贴链接，点击「开始下载」开始你的第一个任务</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- 通知 -->
+        <div class="toast hidden" id="toast"></div>
+
+        <!-- 右键菜单 -->
+        <div class="context-menu hidden" id="context-menu">
+            <button class="context-item" data-ctx="copy">复制链接</button>
+            <button class="context-item" data-ctx="reveal">打开所在目录</button>
+        </div>
+
+        <!-- 优先级修改弹窗 -->
+        <div class="modal hidden" id="priority-modal">
+            <div class="modal-box">
+                <p class="modal-title">修改优先级</p>
+                <p class="modal-name" id="priority-name"></p>
+                <p class="modal-hint">数字越大，越先开始下载</p>
+                <div class="priority-grid" id="priority-grid"></div>
+                <div class="modal-actions">
+                    <button class="btn" id="priority-cancel">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>

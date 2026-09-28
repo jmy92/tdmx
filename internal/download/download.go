@@ -30,6 +30,7 @@ type Download struct {
 type DownloadInfo struct {
 	ID       uuid.UUID
 	Filename string
+	Dir      string
 	Status   Status
 	Priority int
 	Progress Progress

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 	"uuid"
@@ -34,11 +35,24 @@ func New(cfg *config.HTTPConfig) *Downloader {
 
 func (d *Downloader) Type() string { return "http" }
 
+// DownloadDir returns the configured HTTP download directory.
+func (d *Downloader) DownloadDir() string { return d.cfg.DownloadDir }
+
+// SetDownloadDir updates the download directory at runtime. Takes effect for
+// newly added downloads; in-flight downloads keep their original directory.
+// The chunk temp directory moves to the same disk as the save dir — keeping
+// chunks on the system temp drive makes merging require 2x free space there
+// and can fill the system disk entirely.
+func (d *Downloader) SetDownloadDir(dir string) {
+	d.cfg.DownloadDir = dir
+	d.cfg.TempDir = filepath.Join(dir, ".tdm-temp")
+}
+
 func (d *Downloader) CanHandle(url string) bool {
 	return httpPkg.IsDownloadable(url)
 }
 
-func (d *Downloader) Init(ctx context.Context, url string, priority int) (*download.Download, error) {
+func (d *Downloader) Init(ctx context.Context, url string, priority, threads int) (*download.Download, error) {
 	id := uuid.New()
 	tempDir := filepath.Join(d.cfg.TempDir, id.String())
 
@@ -51,7 +65,12 @@ func (d *Downloader) Init(ctx context.Context, url string, priority int) (*downl
 		return nil, fmt.Errorf("%w: %s", httpPkg.ErrUnknownSize, url)
 	}
 
-	chunks := makeChunks(meta, tempDir, d.cfg.Chunks)
+	numChunks := d.cfg.Chunks
+	if threads > 0 {
+		numChunks = threads
+	}
+
+	chunks := makeChunks(meta, tempDir, numChunks)
 
 	if err := os.MkdirAll(tempDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create temp dir: %w", err)
@@ -61,6 +80,7 @@ func (d *Downloader) Init(ctx context.Context, url string, priority int) (*downl
 		Chunks:         chunks,
 		SupportsRanges: meta.supportsRanges,
 		TempDir:        tempDir,
+		Threads:        threads,
 	}
 
 	stateBytes, err := json.Marshal(&st)
@@ -101,6 +121,21 @@ func (d *Downloader) Start(ctx context.Context, dl *download.Download, onProgres
 	}
 
 	if len(pending) == 0 {
+		// 所有分片早已下完（例如上次在合并阶段失败）。必须校验最终文件
+		// 是否真的存在且完整，不能直接当作成功——否则会出现"点一下恢复
+		// 就显示已完成"的假成功，而磁盘上只有残缺文件。
+		target := filepath.Join(dl.Dir, dl.Filename)
+
+		if info, statErr := os.Stat(target); statErr == nil && info.Size() == dl.TotalSize {
+			return nil
+		}
+
+		if mergeErr := d.merge(&st, dl.Dir, dl.Filename); mergeErr != nil {
+			return mergeErr
+		}
+
+		_ = os.RemoveAll(st.TempDir)
+
 		return nil
 	}
 
@@ -132,7 +167,11 @@ func (d *Downloader) Start(ctx context.Context, dl *download.Download, onProgres
 
 	// Download chunks concurrently with errgroup + semaphore
 	g, gCtx := errgroup.WithContext(ctx)
-	sem := make(chan struct{}, d.cfg.Connections)
+	connections := d.cfg.Connections
+	if st.Threads > 0 {
+		connections = st.Threads
+	}
+	sem := make(chan struct{}, connections)
 
 	for _, idx := range pending {
 		g.Go(func() error {
@@ -160,8 +199,19 @@ func (d *Downloader) Start(ctx context.Context, dl *download.Download, onProgres
 		return err
 	}
 
+	// 落盘前的最后一步才做重名检查：此刻磁盘上仍存在同名文件时才改名
+	// （"name (1).ext" 风格）。若同名文件在下载期间已被删除，则直接用
+	// 原名——重命名的唯一目的是避免覆盖既有文件，而不是区分任务。
+	finalName := resolveNameOnDisk(dl.Dir, dl.Filename)
+	if finalName != dl.Filename {
+		slog.Info("target file exists, renaming on merge", "from", dl.Filename, "to", finalName)
+		dl.Filename = finalName
+	}
+
 	// All chunks complete — merge into final file
 	if mergeErr := d.merge(&st, dl.Dir, dl.Filename); mergeErr != nil {
+		// 合并失败（最常见：目标盘满）时保留分片，让用户恢复时可以
+		// 直接重新合并，不必重新下载整个文件。
 		return mergeErr
 	}
 
@@ -169,6 +219,29 @@ func (d *Downloader) Start(ctx context.Context, dl *download.Download, onProgres
 	_ = os.RemoveAll(st.TempDir)
 
 	return nil
+}
+
+// resolveNameOnDisk returns filename unchanged if no such file exists in
+// dir; otherwise the first free "name (n)ext" variant. Only the on-disk
+// state matters — that is the moment overwriting would actually happen.
+func resolveNameOnDisk(dir, filename string) string {
+	if filename == "" {
+		return filename
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, filename)); os.IsNotExist(err) {
+		return filename
+	}
+
+	ext := filepath.Ext(filename)
+	base := strings.TrimSuffix(filename, ext)
+
+	for i := 1; ; i++ {
+		candidate := fmt.Sprintf("%s (%d)%s", base, i, ext)
+		if _, err := os.Stat(filepath.Join(dir, candidate)); os.IsNotExist(err) {
+			return candidate
+		}
+	}
 }
 
 func (d *Downloader) Remove(dl *download.Download) error {
@@ -279,6 +352,13 @@ func (d *Downloader) transferChunk(ctx context.Context, chunk *chunkState, url s
 
 			return readErr
 		}
+	}
+
+	// 连接提前断开但字节没下满（服务器在 Content-Length 之外截断流）时，
+	// EOF-break 会把半截分片当成功，最终合并出残缺文件。这里必须校验。
+	if remaining > 0 {
+		return fmt.Errorf("connection closed early: chunk %s incomplete (%d/%d bytes)",
+			chunk.ID, chunk.Downloaded, chunk.EndByte-chunk.StartByte+1)
 	}
 
 	return nil

@@ -55,31 +55,17 @@ func NewClient() *Client {
 	}
 }
 
-// IsDownloadable checks if the given URL is downloadable.
+// IsDownloadable checks if the given URL looks like a downloadable HTTP(S)
+// link using local validation only — no network requests. Network-level
+// validation happens later during the download's async initialization
+// (probe) so that adding a task never blocks on a slow server.
 func IsDownloadable(urlStr string) bool {
-	_, err := url.Parse(urlStr)
+	u, err := url.Parse(urlStr)
 	if err != nil {
 		return false
 	}
 
-	resp, err := http.Head(urlStr)
-	if err != nil || resp.StatusCode >= 400 {
-		// Fallback to GET if HEAD fails
-		resp, err = http.Get(urlStr)
-		if err != nil {
-			return false
-		}
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			slog.Warn("failed to close response body", "err", err)
-		}
-	}()
-
-	finalURL := resp.Request.URL
-
-	return (finalURL.Scheme == "http" || finalURL.Scheme == "https") && isDownloadableContent(resp)
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
 // isDownloadableContent checks if the response represents downloadable content.

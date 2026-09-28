@@ -310,7 +310,7 @@ func renderHeader(m *Model) string {
 			failed++
 		case download.Queued:
 			queued++
-		case download.Pending, download.Cancelled:
+		case download.Pending, download.Initializing, download.Cancelled:
 		}
 	}
 

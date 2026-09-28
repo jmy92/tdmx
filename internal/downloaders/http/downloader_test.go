@@ -94,9 +94,11 @@ func TestMakeChunks(t *testing.T) {
 
 	t.Run("chunk temp file paths use tempDir", func(t *testing.T) {
 		meta := httpdl.NewProbeResult("file.bin", 1000, true)
-		chunks := httpdl.MakeChunks(meta, "/my/temp", 2)
+		// 用真实临时目录断言，避免手写路径在 Windows 上的分隔符差异
+		tmp := t.TempDir()
+		chunks := httpdl.MakeChunks(meta, tmp, 2)
 		for _, c := range chunks {
-			assert.Equal(t, "/my/temp", filepath.Dir(c.TempFilePath))
+			assert.Equal(t, tmp, filepath.Dir(c.TempFilePath))
 		}
 	})
 
@@ -375,6 +377,12 @@ func TestStart(t *testing.T) {
 		client := httpPkg.NewClient()
 		d := httpdl.NewDownloaderWithClient(cfg, client)
 
+		// 预先创建完整的最终文件，模拟"上次合并已成功"的场景
+		chunkFile := filepath.Join(tmpDir, "chunk0")
+		require.NoError(t, os.WriteFile(chunkFile, make([]byte, 100), 0o644))
+		outFile := filepath.Join(outDir, "output.txt")
+		require.NoError(t, os.WriteFile(outFile, make([]byte, 100), 0o644))
+
 		st := httpdl.HttpState{
 			Chunks: []httpdl.ChunkState{
 				{
@@ -500,7 +508,7 @@ func TestInit(t *testing.T) {
 		client := httpPkg.NewClient()
 		d := httpdl.NewDownloaderWithClient(cfg, client)
 
-		dl, err := d.Init(context.Background(), srv.URL, 5)
+		dl, err := d.Init(context.Background(), srv.URL, 5, 0)
 		require.NoError(t, err)
 
 		assert.Equal(t, srv.URL, dl.URL)
@@ -534,7 +542,7 @@ func TestInit(t *testing.T) {
 		client := httpPkg.NewClient()
 		d := httpdl.NewDownloaderWithClient(cfg, client)
 
-		_, err := d.Init(context.Background(), srv.URL, 1)
+		_, err := d.Init(context.Background(), srv.URL, 1, 0)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to probe URL")
 	})

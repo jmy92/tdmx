@@ -9,7 +9,9 @@ before:
     - go-winres make --product-version=git-tag --file-version=git-tag --arch=amd64,arm64
 
 builds:
-  - env:
+  # TUI binary (all platforms).
+  - id: tdm
+    env:
       - CGO_ENABLED=0
     flags:
       - -trimpath
@@ -25,6 +27,20 @@ builds:
     goarch:
       - amd64
       - arm64
+
+  # GUI binary (Wails; windows-only, WebView2-based).
+  - id: tdm-gui
+    main: ./cmd/tdm-gui
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -H=windowsgui -X main.version={{.Version}} -X main.buildTime={{.Date}}
+    goos:
+      - windows
+    goarch:
+      - amd64
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"

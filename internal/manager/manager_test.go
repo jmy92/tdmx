@@ -109,9 +109,12 @@ func newMockDownloader() *mockDownloader {
 
 func (d *mockDownloader) Type() string { return "mock" }
 
+// DownloadDir is part of the Downloader interface.
+func (d *mockDownloader) DownloadDir() string { return "/tmp" }
+
 func (d *mockDownloader) CanHandle(_ string) bool { return d.canHandle }
 
-func (d *mockDownloader) Init(_ context.Context, url string, priority int) (*download.Download, error) {
+func (d *mockDownloader) Init(_ context.Context, url string, priority, threads int) (*download.Download, error) {
 	if d.initErr != nil {
 		return nil, d.initErr
 	}
@@ -193,7 +196,7 @@ func TestManager(t *testing.T) {
 			m, cancel := startManager(t, s, dlr, 2)
 			defer shutdownManager(t, m, cancel)
 
-			id, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5)
+			id, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5, 0)
 			require.NoError(t, err)
 			assert.NotEqual(t, uuid.Nil(), id)
 			assert.Equal(t, 1, s.count())
@@ -216,7 +219,7 @@ func TestManager(t *testing.T) {
 					m, cancel := startManager(t, s, dlr, 2)
 					defer shutdownManager(t, m, cancel)
 
-					_, err := m.AddDownload(context.Background(), "http://example.com/file.zip", tc.priority)
+					_, err := m.AddDownload(context.Background(), "http://example.com/file.zip", tc.priority, 0)
 					assert.ErrorIs(t, err, manager.ErrInvalidPriority)
 				})
 			}
@@ -229,20 +232,33 @@ func TestManager(t *testing.T) {
 			m, cancel := startManager(t, s, dlr, 2)
 			defer shutdownManager(t, m, cancel)
 
-			_, err := m.AddDownload(context.Background(), "ftp://example.com/file", 5)
+			_, err := m.AddDownload(context.Background(), "ftp://example.com/file", 5, 0)
 			assert.ErrorIs(t, err, manager.ErrNoDownloader)
 		})
 
 		t.Run("init error", func(t *testing.T) {
+			// Init now runs asynchronously: AddDownload returns success and
+			// the download becomes visible immediately (Initializing), then
+			// transitions to Failed once the background probe fails.
 			s := newMockStore()
 			dlr := newMockDownloader()
 			dlr.initErr = errors.New("probe failed")
 			m, cancel := startManager(t, s, dlr, 2)
 			defer shutdownManager(t, m, cancel)
 
-			_, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5)
-			assert.Error(t, err)
-			assert.Equal(t, 0, s.count())
+			id, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5, 0)
+			require.NoError(t, err)
+			assert.NotEqual(t, uuid.Nil(), id)
+
+			// Wait for the background initialization to fail.
+			assert.Eventually(t, func() bool {
+				for _, info := range m.GetAllDownloads() {
+					if info.ID == id {
+						return info.Status == download.Failed
+					}
+				}
+				return false
+			}, 2*time.Second, 20*time.Millisecond, "download should become Failed after init error")
 		})
 
 		t.Run("store save error", func(t *testing.T) {
@@ -252,7 +268,7 @@ func TestManager(t *testing.T) {
 			m, cancel := startManager(t, s, dlr, 2)
 			defer shutdownManager(t, m, cancel)
 
-			_, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5)
+			_, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5, 0)
 			assert.Error(t, err)
 		})
 	})
@@ -441,7 +457,7 @@ func TestManager(t *testing.T) {
 		m, cancel := startManager(t, s, dlr, 2)
 		defer shutdownManager(t, m, cancel)
 
-		id, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5)
+		id, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5, 0)
 		require.NoError(t, err)
 
 		time.Sleep(100 * time.Millisecond)
@@ -483,11 +499,11 @@ func TestManager(t *testing.T) {
 			defer shutdownManager(t, m, cancel)
 
 			ctx := context.Background()
-			_, err := m.AddDownload(ctx, "http://example.com/low", 1)
+			_, err := m.AddDownload(ctx, "http://example.com/low", 1, 0)
 			require.NoError(t, err)
-			_, err = m.AddDownload(ctx, "http://example.com/high", 9)
+			_, err = m.AddDownload(ctx, "http://example.com/high", 9, 0)
 			require.NoError(t, err)
-			_, err = m.AddDownload(ctx, "http://example.com/mid", 5)
+			_, err = m.AddDownload(ctx, "http://example.com/mid", 5, 0)
 			require.NoError(t, err)
 
 			time.Sleep(50 * time.Millisecond)
@@ -566,7 +582,7 @@ func TestManager(t *testing.T) {
 			m, cancel := startManager(t, s, dlr, 2)
 			defer shutdownManager(t, m, cancel)
 
-			id, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5)
+			id, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5, 0)
 			require.NoError(t, err)
 
 			time.Sleep(200 * time.Millisecond)
@@ -587,7 +603,7 @@ func TestManager(t *testing.T) {
 			m, cancel := startManager(t, s, dlr, 2)
 			defer shutdownManager(t, m, cancel)
 
-			id, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5)
+			id, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5, 0)
 			require.NoError(t, err)
 
 			time.Sleep(200 * time.Millisecond)
@@ -643,7 +659,7 @@ func TestManager(t *testing.T) {
 
 		ctx := context.Background()
 		for i := range 5 {
-			_, err := m.AddDownload(ctx, "http://example.com/file", i%10+1)
+			_, err := m.AddDownload(ctx, "http://example.com/file", i%10+1, 0)
 			require.NoError(t, err)
 		}
 
@@ -669,7 +685,7 @@ func TestManager(t *testing.T) {
 
 			m, cancel := startManager(t, s, dlr, 2)
 
-			_, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5)
+			_, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5, 0)
 			require.NoError(t, err)
 
 			time.Sleep(100 * time.Millisecond)
@@ -705,7 +721,7 @@ func TestManager(t *testing.T) {
 			m.Register(dlr)
 			require.NoError(t, m.Start(ctx))
 
-			_, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5)
+			_, err := m.AddDownload(context.Background(), "http://example.com/file.zip", 5, 0)
 			require.NoError(t, err)
 
 			time.Sleep(100 * time.Millisecond)
@@ -749,7 +765,7 @@ func TestDownloaderStateWriteDoesNotRacePersistLoop(t *testing.T) {
 		m.Register(dlr)
 		require.NoError(t, m.Start(ctx))
 
-		id, err := m.AddDownload(ctx, "http://example.com/file.zip", 5)
+		id, err := m.AddDownload(ctx, "http://example.com/file.zip", 5, 0)
 		require.NoError(t, err)
 
 		time.Sleep(2100 * time.Millisecond)
@@ -785,7 +801,7 @@ func TestShutdownTimeoutLateErrorDoesNotPanic(t *testing.T) {
 	m.Register(dlr)
 	require.NoError(t, m.Start(ctx))
 
-	_, err := m.AddDownload(ctx, "http://example.com/file.zip", 5)
+	_, err := m.AddDownload(ctx, "http://example.com/file.zip", 5, 0)
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
